@@ -21,7 +21,7 @@ class SupabaseClient {
                         autoRefreshToken: true,
                         persistSession: true,
                         detectSessionInUrl: true,
-                        redirectTo: window.location.href.split('?')[0].split('#')[0],
+                        redirectTo: 'https://leo-610.github.io/digital-travel-diary',
                         flowType: 'implicit'
                     },
                     global: {
