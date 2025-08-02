@@ -58,6 +58,29 @@ class SupabaseClient {
     onAuthStateChange(event, session) {
         console.log('🔄 认证状态变化:', event, session?.user?.email);
         
+        // 检查是否有OAuth错误
+        if (typeof window !== 'undefined') {
+            const urlParams = new URLSearchParams(window.location.search);
+            const error = urlParams.get('error');
+            const errorDescription = urlParams.get('error_description');
+            
+            if (error === 'server_error' && errorDescription?.includes('Unable to exchange external code')) {
+                console.error('❌ OAuth登录错误:', {
+                    error,
+                    error_code: urlParams.get('error_code'),
+                    error_description: errorDescription
+                });
+                
+                // 清理URL中的错误参数
+                const cleanUrl = window.location.origin + window.location.pathname;
+                window.history.replaceState({}, document.title, cleanUrl);
+                
+                // 显示错误提示
+                this.showOAuthError(errorDescription);
+                return;
+            }
+        }
+        
         // 认证状态变化时的回调
         if (event === 'SIGNED_IN') {
             console.log('✅ 用户已登录');
@@ -156,18 +179,27 @@ class SupabaseClient {
         try {
             console.log('🔄 开始GitHub登录...');
             
+            // 检查当前URL是否有错误参数
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('error')) {
+                console.log('⚠️ 检测到URL中有错误参数，先清理...');
+                const cleanUrl = window.location.origin + window.location.pathname;
+                window.history.replaceState({}, document.title, cleanUrl);
+            }
+            
             // 检测是否为本地开发环境
             const isLocalhost = window.location.hostname === 'localhost' || 
                                window.location.hostname === '127.0.0.1' ||
                                window.location.protocol === 'file:';
             
-            console.log('🔍 调试信息:', {
+            console.log('🔍 环境检测:', {
                 hostname: window.location.hostname,
                 protocol: window.location.protocol,
-                isLocalhost: isLocalhost
+                isLocalhost: isLocalhost,
+                fullUrl: window.location.href
             });
             
-            // 精确匹配GitHub OAuth配置的URL
+            // 确定重定向URL
             let redirectUrl;
             if (isLocalhost) {
                 redirectUrl = `http://localhost:${window.location.port || '8000'}`;
@@ -176,15 +208,13 @@ class SupabaseClient {
                 redirectUrl = 'https://leo-610.github.io/digital-travel-diary';
             }
             
-            // 额外保险：如果不是localhost，强制使用GitHub Pages URL
-            if (window.location.hostname === 'leo-610.github.io') {
-                redirectUrl = 'https://leo-610.github.io/digital-travel-diary';
-            }
-            
-            console.log('🔗 精确重定向URL:', redirectUrl);
-            console.log('🌐 当前页面URL:', window.location.href);
-            console.log('🏠 window.location.origin:', window.location.origin);
-            console.log('📍 window.location.pathname:', window.location.pathname);
+            console.log('🔗 使用重定向URL:', redirectUrl);
+            console.log('📋 OAuth流程说明:');
+            console.log('   1. 重定向到GitHub授权页面');
+            console.log('   2. 用户授权后，GitHub将回调到Supabase端点');
+            console.log('   3. Supabase处理后重定向回网站');
+            console.log('⚠️ 重要：GitHub OAuth应用的回调URL必须设置为:');
+            console.log('   https://muawpgjdzoxhkpxghuvt.supabase.co/auth/v1/callback');
             
             const { data, error } = await this.supabase.auth.signInWithOAuth({
                 provider: 'github',
@@ -845,6 +875,74 @@ class SupabaseClient {
             console.warn('解析图片数据失败:', error, '原始数据:', images);
             return [];
         }
+    }
+    
+    // 显示OAuth错误提示
+    showOAuthError(errorDescription) {
+        // 检查是否已经显示过提示
+        if (document.getElementById('oauth-error-notice')) {
+            return;
+        }
+        
+        const notice = document.createElement('div');
+        notice.id = 'oauth-error-notice';
+        notice.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 400px;
+            z-index: 10000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            font-family: Arial, sans-serif;
+        `;
+        
+        notice.innerHTML = `
+            <div style="display: flex; align-items: flex-start; gap: 15px;">
+                <div style="color: #dc3545; font-size: 24px;">🚫</div>
+                <div style="flex: 1;">
+                    <strong>GitHub登录失败</strong>
+                    <p style="margin: 8px 0 15px 0; font-size: 14px; line-height: 1.4;">
+                        OAuth配置错误：GitHub应用的回调URL设置不正确。
+                    </p>
+                    <div style="background: #fff; padding: 10px; border-radius: 4px; margin: 10px 0; font-size: 12px;">
+                        <strong>错误详情：</strong><br>
+                        ${errorDescription || 'Unable to exchange external code'}
+                    </div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button onclick="window.open('https://github.com/settings/applications/2803708', '_blank')" style="
+                            background: #007bff; color: white; border: none; 
+                            padding: 8px 12px; border-radius: 4px; cursor: pointer;
+                            font-size: 12px; white-space: nowrap;
+                        ">修复GitHub设置</button>
+                        <button onclick="this.parentElement.parentElement.parentElement.parentElement.remove()" style="
+                            background: #6c757d; color: white; border: none; 
+                            padding: 8px 12px; border-radius: 4px; cursor: pointer;
+                            font-size: 12px;
+                        ">关闭</button>
+                    </div>
+                    <div style="margin-top: 10px; font-size: 11px; color: #6c757d;">
+                        请将GitHub OAuth应用的Authorization callback URL设置为：<br>
+                        <code style="background: #f8f9fa; padding: 2px 4px; border-radius: 2px; font-size: 10px;">
+                        https://muawpgjdzoxhkpxghuvt.supabase.co/auth/v1/callback
+                        </code>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(notice);
+        
+        // 15分钟后自动移除提示
+        setTimeout(() => {
+            if (notice.parentNode) {
+                notice.parentNode.removeChild(notice);
+            }
+        }, 900000);
     }
     
     // 显示邮件确认提示
