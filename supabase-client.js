@@ -64,8 +64,8 @@ class SupabaseClient {
             const error = urlParams.get('error');
             const errorDescription = urlParams.get('error_description');
             
-            if (error === 'server_error' && errorDescription?.includes('Unable to exchange external code')) {
-                console.error('❌ OAuth登录错误:', {
+            if (error) {
+                console.error('❌ URL中检测到OAuth错误:', {
                     error,
                     error_code: urlParams.get('error_code'),
                     error_description: errorDescription
@@ -75,8 +75,8 @@ class SupabaseClient {
                 const cleanUrl = window.location.origin + window.location.pathname;
                 window.history.replaceState({}, document.title, cleanUrl);
                 
-                // 显示错误提示
-                this.showOAuthError(errorDescription);
+                // 显示简单错误提示
+                alert('GitHub登录失败: ' + (errorDescription || error));
                 return;
             }
         }
@@ -179,47 +179,16 @@ class SupabaseClient {
         try {
             console.log('🔄 开始GitHub登录...');
             
-            // 检查当前URL是否有错误参数
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('error')) {
-                console.log('⚠️ 检测到URL中有错误参数，先清理...');
-                const cleanUrl = window.location.origin + window.location.pathname;
-                window.history.replaceState({}, document.title, cleanUrl);
+            // 检查Supabase客户端是否初始化
+            if (!this.supabase) {
+                throw new Error('Supabase客户端未初始化');
             }
             
-            // 检测是否为本地开发环境
-            const isLocalhost = window.location.hostname === 'localhost' || 
-                               window.location.hostname === '127.0.0.1' ||
-                               window.location.protocol === 'file:';
-            
-            console.log('🔍 环境检测:', {
-                hostname: window.location.hostname,
-                protocol: window.location.protocol,
-                isLocalhost: isLocalhost,
-                fullUrl: window.location.href
-            });
-            
-            // 确定重定向URL
-            let redirectUrl;
-            if (isLocalhost) {
-                redirectUrl = `http://localhost:${window.location.port || '8000'}`;
-            } else {
-                // 强制使用正确的GitHub Pages URL
-                redirectUrl = 'https://leo-610.github.io/digital-travel-diary';
-            }
-            
-            console.log('🔗 使用重定向URL:', redirectUrl);
-            console.log('📋 OAuth流程说明:');
-            console.log('   1. 重定向到GitHub授权页面');
-            console.log('   2. 用户授权后，GitHub将回调到Supabase端点');
-            console.log('   3. Supabase处理后重定向回网站');
-            console.log('⚠️ 重要：GitHub OAuth应用的回调URL必须设置为:');
-            console.log('   https://muawpgjdzoxhkpxghuvt.supabase.co/auth/v1/callback');
-            
+            // 简单直接的登录调用
             const { data, error } = await this.supabase.auth.signInWithOAuth({
                 provider: 'github',
                 options: {
-                    redirectTo: redirectUrl
+                    redirectTo: 'https://leo-610.github.io/digital-travel-diary'
                 }
             });
             
