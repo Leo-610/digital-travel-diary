@@ -178,11 +178,19 @@ class SupabaseClient {
     async signInWithGitHub() {
         try {
             console.log('🔄 开始GitHub登录...');
+            console.log('🔍 当前环境信息:', {
+                url: window.location.href,
+                origin: window.location.origin,
+                hostname: window.location.hostname
+            });
             
             // 检查Supabase客户端是否初始化
             if (!this.supabase) {
                 throw new Error('Supabase客户端未初始化');
             }
+            
+            console.log('✅ Supabase客户端已初始化');
+            console.log('🔗 准备调用GitHub OAuth...');
             
             // 简单直接的登录调用
             const { data, error } = await this.supabase.auth.signInWithOAuth({
@@ -193,15 +201,22 @@ class SupabaseClient {
             });
             
             if (error) {
-                console.error('❌ GitHub登录错误:', error);
+                console.error('❌ GitHub登录API错误:', error);
+                console.error('错误详情:', {
+                    message: error.message,
+                    status: error.status,
+                    statusText: error.statusText
+                });
                 throw error;
             }
             
-            console.log('✅ GitHub登录重定向中...', data);
+            console.log('✅ GitHub OAuth API调用成功，准备重定向...', data);
             return { success: true, data };
         } catch (error) {
-            console.error('❌ GitHub登录失败:', error);
-            return { success: false, error: error.message };
+            console.error('❌ GitHub登录完整错误:', error);
+            console.error('错误类型:', typeof error);
+            console.error('错误字符串:', error.toString());
+            return { success: false, error: error.message || error.toString() };
         }
     }
     
