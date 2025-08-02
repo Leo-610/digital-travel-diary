@@ -61,7 +61,20 @@ class SupabaseClient {
         // 认证状态变化时的回调
         if (event === 'SIGNED_IN') {
             console.log('✅ 用户已登录');
+            
+            // 检查是否是OAuth登录（GitHub等）
+            if (session?.user?.app_metadata?.provider === 'github') {
+                console.log('🐙 GitHub OAuth 登录成功');
+                // 为OAuth用户创建档案（如果需要）
+                this.ensureUserProfile(session.user);
+            }
+            
             this.updateUIForLoggedInUser();
+            
+            // 通知页面登录成功
+            if (typeof window !== 'undefined' && window.handleOAuthSuccess) {
+                window.handleOAuthSuccess();
+            }
         } else if (event === 'SIGNED_OUT') {
             console.log('👋 用户已登出');
             this.updateUIForLoggedOutUser();
@@ -71,8 +84,8 @@ class SupabaseClient {
             console.log('👤 用户信息已更新');
         }
         
-        // 检查邮件确认状态
-        if (session?.user && !session.user.email_confirmed_at) {
+        // 检查邮件确认状态（仅对邮箱注册用户）
+        if (session?.user && session.user.app_metadata?.provider === 'email' && !session.user.email_confirmed_at) {
             console.log('⚠️ 邮件未确认，用户ID:', session.user.id);
             this.showEmailConfirmationNotice();
         }
@@ -126,6 +139,31 @@ class SupabaseClient {
             if (error) throw error;
             return { success: true, data };
         } catch (error) {
+            return { success: false, error: error.message };
+        }
+    }
+    
+    // GitHub OAuth 登录
+    async signInWithGitHub() {
+        try {
+            console.log('🔄 开始GitHub登录...');
+            
+            const { data, error } = await this.supabase.auth.signInWithOAuth({
+                provider: 'github',
+                options: {
+                    redirectTo: window.location.origin
+                }
+            });
+            
+            if (error) {
+                console.error('❌ GitHub登录错误:', error);
+                throw error;
+            }
+            
+            console.log('✅ GitHub登录重定向中...', data);
+            return { success: true, data };
+        } catch (error) {
+            console.error('❌ GitHub登录失败:', error);
             return { success: false, error: error.message };
         }
     }
@@ -192,6 +230,42 @@ class SupabaseClient {
             if (error) throw error;
             return { success: true, data };
         } catch (error) {
+            return { success: false, error: error.message };
+        }
+    }
+    
+    // 确保用户档案存在（用于OAuth用户）
+    async ensureUserProfile(user) {
+        try {
+            console.log('🔄 检查用户档案是否存在...', user.id);
+            
+            // 先检查是否已有档案
+            const { data: existingProfile, error: checkError } = await this.supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+            
+            if (checkError && checkError.code !== 'PGRST116') {
+                // PGRST116 是"没有找到行"的错误代码，其他错误需要处理
+                throw checkError;
+            }
+            
+            if (existingProfile) {
+                console.log('✅ 用户档案已存在');
+                return { success: true, data: existingProfile };
+            }
+            
+            // 如果档案不存在，创建一个
+            console.log('🔄 为OAuth用户创建档案...');
+            const nickname = user.user_metadata?.full_name || 
+                           user.user_metadata?.name || 
+                           user.email?.split('@')[0] || 
+                           '用户';
+            
+            return await this.createUserProfile(user.id, nickname);
+        } catch (error) {
+            console.error('❌ 确保用户档案失败:', error);
             return { success: false, error: error.message };
         }
     }
