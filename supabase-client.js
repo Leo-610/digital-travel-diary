@@ -21,7 +21,7 @@ class SupabaseClient {
                         autoRefreshToken: true,
                         persistSession: true,
                         detectSessionInUrl: true,
-                        redirectTo: window.location.origin,
+                        redirectTo: window.location.href.split('?')[0].split('#')[0],
                         flowType: 'implicit'
                     },
                     global: {
