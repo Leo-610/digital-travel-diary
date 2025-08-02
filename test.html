@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -84,3 +85,91 @@
     </script>
 </body>
 </html>
+=======
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试页面</title>
+</head>
+<body>
+    <h1>Supabase 连接测试</h1>
+    <button onclick="testConnection()">测试连接</button>
+    <button onclick="testGetAllDiaries()">测试获取所有日记</button>
+    <div id="result"></div>
+
+    <script src="supabase-client.js"></script>
+    <script>
+        let supabaseClient;
+        
+        async function initClient() {
+            supabaseClient = new SupabaseClient();
+            // 等待初始化完成
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            document.getElementById('result').innerHTML = '<p>客户端已初始化</p>';
+        }
+        
+        async function testConnection() {
+            if (!supabaseClient) {
+                await initClient();
+            }
+            
+            const result = document.getElementById('result');
+            result.innerHTML = '<p>测试连接中...</p>';
+            
+            try {
+                // 测试基本连接
+                const { data, error } = await supabaseClient.supabase
+                    .from('diary_entries')
+                    .select('count', { count: 'exact' });
+                    
+                if (error) {
+                    result.innerHTML = `<p style="color: red;">连接失败: ${error.message}</p>`;
+                } else {
+                    result.innerHTML = `<p style="color: green;">连接成功！数据库中有 ${data.length} 条记录</p>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<p style="color: red;">测试出错: ${error.message}</p>`;
+            }
+        }
+        
+        async function testGetAllDiaries() {
+            if (!supabaseClient) {
+                await initClient();
+            }
+            
+            const result = document.getElementById('result');
+            result.innerHTML = '<p>获取日记中...</p>';
+            
+            try {
+                const diaryResult = await supabaseClient.getAllDiaries();
+                console.log('获取日记结果:', diaryResult);
+                
+                if (diaryResult.success) {
+                    const userCount = Object.keys(diaryResult.data).length;
+                    let totalDiaries = 0;
+                    Object.values(diaryResult.data).forEach(userData => {
+                        totalDiaries += userData.entries.length;
+                    });
+                    
+                    result.innerHTML = `
+                        <p style="color: green;">
+                            成功获取 ${userCount} 个用户的 ${totalDiaries} 篇日记
+                        </p>
+                        <pre>${JSON.stringify(diaryResult.data, null, 2)}</pre>
+                    `;
+                } else {
+                    result.innerHTML = `<p style="color: red;">获取失败: ${diaryResult.error}</p>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<p style="color: red;">测试出错: ${error.message}</p>`;
+            }
+        }
+
+        // 页面加载时初始化
+        window.addEventListener('load', initClient);
+    </script>
+</body>
+</html>
+>>>>>>> 75131430882a627904defc03312c42e7e3d4ade4
