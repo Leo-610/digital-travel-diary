@@ -20,7 +20,14 @@ class SupabaseClient {
                     auth: {
                         autoRefreshToken: true,
                         persistSession: true,
-                        detectSessionInUrl: false
+                        detectSessionInUrl: true,
+                        redirectTo: window.location.origin,
+                        flowType: 'implicit'
+                    },
+                    global: {
+                        headers: {
+                            'X-Client-Info': 'digital-travel-diary@1.0.0'
+                        }
                     }
                 });
                 
@@ -49,38 +56,61 @@ class SupabaseClient {
     }
     
     onAuthStateChange(event, session) {
+        console.log('🔄 认证状态变化:', event, session?.user?.email);
+        
         // 认证状态变化时的回调
         if (event === 'SIGNED_IN') {
-            console.log('用户已登录');
+            console.log('✅ 用户已登录');
             this.updateUIForLoggedInUser();
         } else if (event === 'SIGNED_OUT') {
-            console.log('用户已登出');
+            console.log('👋 用户已登出');
             this.updateUIForLoggedOutUser();
+        } else if (event === 'TOKEN_REFRESHED') {
+            console.log('🔄 Token已刷新');
+        } else if (event === 'USER_UPDATED') {
+            console.log('👤 用户信息已更新');
+        }
+        
+        // 检查邮件确认状态
+        if (session?.user && !session.user.email_confirmed_at) {
+            console.log('⚠️ 邮件未确认，用户ID:', session.user.id);
+            this.showEmailConfirmationNotice();
         }
     }
     
     // 用户注册
     async signUp(email, password, nickname) {
         try {
+            console.log('🔄 开始注册用户:', { email, nickname });
+            
             const { data, error } = await this.supabase.auth.signUp({
                 email,
                 password,
                 options: {
                     data: {
                         nickname: nickname
-                    }
+                    },
+                    emailRedirectTo: window.location.origin
                 }
             });
             
-            if (error) throw error;
+            if (error) {
+                console.error('❌ 注册错误:', error);
+                throw error;
+            }
+            
+            console.log('✅ 注册响应:', data);
             
             // 创建用户档案
-            if (data.user) {
-                await this.createUserProfile(data.user.id, nickname);
+            if (data.user && data.user.id) {
+                console.log('🔄 创建用户档案...');
+                const profileResult = await this.createUserProfile(data.user.id, nickname);
+                console.log('📄 档案创建结果:', profileResult);
             }
             
             return { success: true, data };
         } catch (error) {
+            console.error('❌ signUp 完整错误:', error);
             return { success: false, error: error.message };
         }
     }
@@ -685,6 +715,88 @@ class SupabaseClient {
         } catch (error) {
             console.warn('解析图片数据失败:', error, '原始数据:', images);
             return [];
+        }
+    }
+    
+    // 显示邮件确认提示
+    showEmailConfirmationNotice() {
+        // 检查是否已经显示过提示
+        if (document.getElementById('email-confirmation-notice')) {
+            return;
+        }
+        
+        const notice = document.createElement('div');
+        notice.id = 'email-confirmation-notice';
+        notice.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+            border-radius: 8px;
+            padding: 15px 20px;
+            max-width: 350px;
+            z-index: 10000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            font-family: Arial, sans-serif;
+        `;
+        
+        notice.innerHTML = `
+            <div style="display: flex; align-items: flex-start; gap: 10px;">
+                <div style="color: #f57c00; font-size: 20px;">📧</div>
+                <div style="flex: 1;">
+                    <strong>请验证您的邮箱</strong>
+                    <p style="margin: 5px 0 10px 0; font-size: 14px;">
+                        我们已向您的邮箱发送了确认邮件，请点击邮件中的链接完成验证。
+                    </p>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="supabaseClient.resendConfirmation()" style="
+                            background: #007bff; color: white; border: none; 
+                            padding: 5px 12px; border-radius: 4px; cursor: pointer;
+                            font-size: 12px;
+                        ">重发邮件</button>
+                        <button onclick="this.parentElement.parentElement.parentElement.parentElement.remove()" style="
+                            background: #6c757d; color: white; border: none; 
+                            padding: 5px 12px; border-radius: 4px; cursor: pointer;
+                            font-size: 12px;
+                        ">关闭</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(notice);
+        
+        // 10分钟后自动移除提示
+        setTimeout(() => {
+            if (notice.parentNode) {
+                notice.parentNode.removeChild(notice);
+            }
+        }, 600000);
+    }
+    
+    // 重新发送确认邮件
+    async resendConfirmation() {
+        try {
+            const { error } = await this.supabase.auth.resend({
+                type: 'signup',
+                email: this.currentUser?.email,
+                options: {
+                    emailRedirectTo: window.location.origin
+                }
+            });
+            
+            if (error) {
+                console.error('重发确认邮件失败:', error);
+                alert('重发邮件失败: ' + error.message);
+            } else {
+                console.log('✅ 确认邮件已重新发送');
+                alert('确认邮件已重新发送，请检查您的邮箱');
+            }
+        } catch (error) {
+            console.error('重发确认邮件错误:', error);
+            alert('重发邮件时出现错误: ' + error.message);
         }
     }
 }

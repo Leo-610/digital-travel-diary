@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase 调试工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .debug-section {
+            background: white;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .code {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Supabase 调试工具</h1>
+    
+    <div class="debug-section">
+        <h2>1. 连接状态检查</h2>
+        <button onclick="checkConnection()">检查 Supabase 连接</button>
+        <div id="connectionStatus"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>2. 认证状态检查</h2>
+        <button onclick="checkAuth()">检查认证状态</button>
+        <div id="authStatus"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>3. 测试注册功能</h2>
+        <input type="email" id="testEmail" placeholder="测试邮箱" value="test@test.com">
+        <input type="password" id="testPassword" placeholder="测试密码" value="test123456">
+        <input type="text" id="testNickname" placeholder="测试昵称" value="测试用户">
+        <button onclick="testSignUp()">测试注册</button>
+        <div id="signupStatus"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>4. 数据库权限检查</h2>
+        <button onclick="checkDatabase()">检查数据库访问权限</button>
+        <div id="databaseStatus"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>5. 邮件配置检查</h2>
+        <button onclick="checkEmailConfig()">检查邮件配置</button>
+        <div id="emailStatus"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>6. 控制台日志</h2>
+        <div id="consoleLog" class="code"></div>
+        <button onclick="clearLog()">清空日志</button>
+    </div>
+
+    <script src="supabase-client.js"></script>
+    <script>
+        let supabaseClient;
+        const logDiv = document.getElementById('consoleLog');
+        
+        // 重写console.log来显示在页面上
+        const originalLog = console.log;
+        const originalError = console.error;
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            logDiv.textContent += '[LOG] ' + args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+            ).join(' ') + '\n';
+            logDiv.scrollTop = logDiv.scrollHeight;
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            logDiv.textContent += '[ERROR] ' + args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+            ).join(' ') + '\n';
+            logDiv.scrollTop = logDiv.scrollHeight;
+        };
+        
+        // 初始化
+        window.addEventListener('load', async () => {
+            console.log('🚀 开始初始化调试工具...');
+            try {
+                supabaseClient = new SupabaseClient();
+                await new Promise(resolve => setTimeout(resolve, 2000)); // 等待初始化
+                console.log('✅ Supabase客户端初始化完成');
+            } catch (error) {
+                console.error('❌ Supabase客户端初始化失败:', error);
+            }
+        });
+        
+        async function checkConnection() {
+            const statusDiv = document.getElementById('connectionStatus');
+            statusDiv.innerHTML = '<div class="info">检查中...</div>';
+            
+            try {
+                if (!supabaseClient || !supabaseClient.supabase) {
+                    throw new Error('Supabase 客户端未初始化');
+                }
+                
+                // 尝试获取session
+                const { data, error } = await supabaseClient.supabase.auth.getSession();
+                
+                if (error) {
+                    statusDiv.innerHTML = `<div class="error">连接失败: ${error.message}</div>`;
+                } else {
+                    statusDiv.innerHTML = `
+                        <div class="success">✅ 连接成功</div>
+                        <div class="code">URL: ${supabaseClient.supabaseUrl}
+Key: ${supabaseClient.supabaseKey.substring(0, 50)}...</div>
+                    `;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">❌ 连接检查失败: ${error.message}</div>`;
+                console.error('连接检查错误:', error);
+            }
+        }
+        
+        async function checkAuth() {
+            const statusDiv = document.getElementById('authStatus');
+            statusDiv.innerHTML = '<div class="info">检查中...</div>';
+            
+            try {
+                const { data: { session }, error } = await supabaseClient.supabase.auth.getSession();
+                
+                if (error) {
+                    statusDiv.innerHTML = `<div class="error">认证检查失败: ${error.message}</div>`;
+                } else if (session) {
+                    statusDiv.innerHTML = `
+                        <div class="success">✅ 用户已登录</div>
+                        <div class="code">用户ID: ${session.user.id}
+邮箱: ${session.user.email}
+验证状态: ${session.user.email_confirmed_at ? '已验证' : '未验证'}</div>
+                    `;
+                } else {
+                    statusDiv.innerHTML = '<div class="warning">⚠️ 未登录状态</div>';
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">❌ 认证检查失败: ${error.message}</div>`;
+                console.error('认证检查错误:', error);
+            }
+        }
+        
+        async function testSignUp() {
+            const statusDiv = document.getElementById('signupStatus');
+            const email = document.getElementById('testEmail').value;
+            const password = document.getElementById('testPassword').value;
+            const nickname = document.getElementById('testNickname').value;
+            
+            if (!email || !password || !nickname) {
+                statusDiv.innerHTML = '<div class="error">请填写所有字段</div>';
+                return;
+            }
+            
+            statusDiv.innerHTML = '<div class="info">注册中...</div>';
+            
+            try {
+                console.log('🔄 开始测试注册...', { email, nickname });
+                
+                const result = await supabaseClient.signUp(email, password, nickname);
+                console.log('注册结果:', result);
+                
+                if (result.success) {
+                    statusDiv.innerHTML = `
+                        <div class="success">✅ 注册成功</div>
+                        <div class="code">用户ID: ${result.data.user?.id}
+邮箱: ${result.data.user?.email}
+需要验证: ${result.data.user?.email_confirmed_at ? '否' : '是'}
+Session: ${result.data.session ? '有' : '无'}</div>
+                    `;
+                    
+                    if (!result.data.user?.email_confirmed_at) {
+                        statusDiv.innerHTML += '<div class="warning">⚠️ 请检查邮箱中的验证邮件</div>';
+                    }
+                } else {
+                    statusDiv.innerHTML = `<div class="error">❌ 注册失败: ${result.error}</div>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">❌ 注册测试失败: ${error.message}</div>`;
+                console.error('注册测试错误:', error);
+            }
+        }
+        
+        async function checkDatabase() {
+            const statusDiv = document.getElementById('databaseStatus');
+            statusDiv.innerHTML = '<div class="info">检查中...</div>';
+            
+            try {
+                // 测试访问profiles表
+                const { data: profiles, error: profilesError } = await supabaseClient.supabase
+                    .from('profiles')
+                    .select('count')
+                    .limit(1);
+                
+                // 测试访问diary_entries表
+                const { data: diaries, error: diariesError } = await supabaseClient.supabase
+                    .from('diary_entries')
+                    .select('count')
+                    .limit(1);
+                
+                let status = '';
+                
+                if (profilesError) {
+                    status += `<div class="error">❌ Profiles表访问失败: ${profilesError.message}</div>`;
+                } else {
+                    status += '<div class="success">✅ Profiles表访问正常</div>';
+                }
+                
+                if (diariesError) {
+                    status += `<div class="error">❌ Diary_entries表访问失败: ${diariesError.message}</div>`;
+                } else {
+                    status += '<div class="success">✅ Diary_entries表访问正常</div>';
+                }
+                
+                statusDiv.innerHTML = status;
+                
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">❌ 数据库检查失败: ${error.message}</div>`;
+                console.error('数据库检查错误:', error);
+            }
+        }
+        
+        async function checkEmailConfig() {
+            const statusDiv = document.getElementById('emailStatus');
+            statusDiv.innerHTML = `
+                <div class="info">📧 邮件配置检查清单</div>
+                <div class="code">当前域名: ${window.location.origin}
+Supabase URL: ${supabaseClient?.supabaseUrl || '未知'}
+
+请确保在Supabase控制台中配置:
+1. Site URL: ${window.location.origin}
+2. Redirect URLs: ${window.location.origin}
+
+检查步骤:
+1. 登录 Supabase Dashboard
+2. 进入 Authentication > Settings
+3. 设置 Site URL 为: ${window.location.origin}
+4. 在 Redirect URLs 中添加: ${window.location.origin}
+5. 保存设置并重试注册</div>
+            `;
+        }
+        
+        function clearLog() {
+            logDiv.textContent = '';
+        }
+    </script>
+</body>
+</html>
