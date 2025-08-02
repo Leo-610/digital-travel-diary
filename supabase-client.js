@@ -161,17 +161,30 @@ class SupabaseClient {
                                window.location.hostname === '127.0.0.1' ||
                                window.location.protocol === 'file:';
             
+            console.log('🔍 调试信息:', {
+                hostname: window.location.hostname,
+                protocol: window.location.protocol,
+                isLocalhost: isLocalhost
+            });
+            
             // 精确匹配GitHub OAuth配置的URL
             let redirectUrl;
             if (isLocalhost) {
                 redirectUrl = `http://localhost:${window.location.port || '8000'}`;
             } else {
-                // 确保与GitHub OAuth应用配置完全匹配
+                // 强制使用正确的GitHub Pages URL
+                redirectUrl = 'https://leo-610.github.io/digital-travel-diary';
+            }
+            
+            // 额外保险：如果不是localhost，强制使用GitHub Pages URL
+            if (window.location.hostname === 'leo-610.github.io') {
                 redirectUrl = 'https://leo-610.github.io/digital-travel-diary';
             }
             
             console.log('🔗 精确重定向URL:', redirectUrl);
             console.log('🌐 当前页面URL:', window.location.href);
+            console.log('🏠 window.location.origin:', window.location.origin);
+            console.log('📍 window.location.pathname:', window.location.pathname);
             
             const { data, error } = await this.supabase.auth.signInWithOAuth({
                 provider: 'github',
