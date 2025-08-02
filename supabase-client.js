@@ -67,6 +67,10 @@ class SupabaseClient {
                 console.log('🐙 GitHub OAuth 登录成功');
                 // 为OAuth用户创建档案（如果需要）
                 this.ensureUserProfile(session.user);
+            } else if (session?.user?.email_confirmed_at) {
+                // 邮箱用户验证后，确保有档案
+                console.log('📧 邮箱用户已验证，检查档案...');
+                this.ensureUserProfile(session.user);
             }
             
             this.updateUIForLoggedInUser();
@@ -119,6 +123,10 @@ class SupabaseClient {
                 console.log('🔄 创建用户档案...');
                 const profileResult = await this.createUserProfile(data.user.id, nickname);
                 console.log('📄 档案创建结果:', profileResult);
+                
+                if (profileResult.needsVerification) {
+                    console.log('⚠️ 用户需要验证邮箱后才能完成档案创建');
+                }
             }
             
             return { success: true, data };
@@ -148,10 +156,21 @@ class SupabaseClient {
         try {
             console.log('🔄 开始GitHub登录...');
             
+            // 检测是否为本地开发环境
+            const isLocalhost = window.location.hostname === 'localhost' || 
+                               window.location.hostname === '127.0.0.1' ||
+                               window.location.protocol === 'file:';
+            
+            const redirectUrl = isLocalhost ? 
+                `http://localhost:${window.location.port || '8000'}` : 
+                window.location.origin;
+            
+            console.log('🔗 重定向URL:', redirectUrl);
+            
             const { data, error } = await this.supabase.auth.signInWithOAuth({
                 provider: 'github',
                 options: {
-                    redirectTo: window.location.origin
+                    redirectTo: redirectUrl
                 }
             });
             
@@ -219,17 +238,34 @@ class SupabaseClient {
     // 创建用户档案
     async createUserProfile(userId, nickname) {
         try {
+            console.log('🔄 创建用户档案...', { userId, nickname });
+            
+            // 使用service role权限或暂时跳过RLS检查
             const { data, error } = await this.supabase
                 .from('profiles')
                 .insert([{
                     id: userId,
                     nickname: nickname,
                     created_at: new Date().toISOString()
-                }]);
+                }])
+                .select();
             
-            if (error) throw error;
+            if (error) {
+                console.error('❌ 档案创建失败:', error);
+                // 如果是RLS策略问题，返回成功但标记需要验证
+                if (error.message.includes('row-level security policy') || 
+                    error.message.includes('permission') || 
+                    error.code === '42501') {
+                    console.log('⚠️ RLS策略阻止档案创建，将在用户验证后重试');
+                    return { success: true, data: null, needsVerification: true, error: null };
+                }
+                throw error;
+            }
+            
+            console.log('✅ 用户档案创建成功:', data);
             return { success: true, data };
         } catch (error) {
+            console.error('❌ createUserProfile 错误:', error);
             return { success: false, error: error.message };
         }
     }

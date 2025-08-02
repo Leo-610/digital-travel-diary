@@ -4437,7 +4437,12 @@
                 const result = await window.supabaseClient.signUp(email, password, nickname);
                 
                 if (result.success) {
-                    showNotification('注册成功！请检查邮箱进行验证', 'success');
+                    // 检查是否需要邮件验证
+                    if (result.data.user && !result.data.session) {
+                        showNotification('注册成功！📧 请检查邮箱并点击验证链接完成注册', 'success');
+                    } else {
+                        showNotification('注册成功！', 'success');
+                    }
                     hideRegisterModal();
                     showLoginModal();
                 } else {
