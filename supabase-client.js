@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 // Supabase 客户端配置
 class SupabaseClient {
     constructor() {
@@ -50,1072 +49,175 @@ class SupabaseClient {
                 this.session = session;
                 this.currentUser = session?.user || null;
                 
-            } catch (error) {
-                console.error('Supabase初始化失败:', error);
-            }
-        }
-    }
-    
-    onAuthStateChange(event, session) {
-        // 认证状态变化时的回调
-        if (event === 'SIGNED_IN') {
-            console.log('用户已登录');
-            this.updateUIForLoggedInUser();
-        } else if (event === 'SIGNED_OUT') {
-            console.log('用户已登出');
-            this.updateUIForLoggedOutUser();
-        }
-    }
-    
-    // 用户注册
-    async signUp(email, password, nickname) {
-        try {
-            // 获取当前网站的URL用于邮件验证重定向
-            const siteUrl = window.location.origin;
-            
-            const { data, error } = await this.supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: {
-                        nickname: nickname
-                    },
-                    // 设置邮件验证后的重定向URL
-                    emailRedirectTo: siteUrl
-                }
-            });
-            
-            if (error) throw error;
-            
-            // 创建用户档案
-            if (data.user) {
-                await this.createUserProfile(data.user.id, nickname);
-            }
-            
-            return { success: true, data };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 用户登录
-    async signIn(email, password) {
-        try {
-            const { data, error } = await this.supabase.auth.signInWithPassword({
-                email,
-                password
-            });
-            
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 用户登出
-    async signOut() {
-        try {
-            // 使用 local 作用域而不是 global，避免 403 错误
-            const { error } = await this.supabase.auth.signOut({ scope: 'local' });
-            if (error) {
-                console.warn('Supabase 登出错误:', error);
-                // 即使 Supabase 返回错误，也清理本地状态
-            }
-            
-            // 清理本地会话数据
-            this.clearLocalSession();
-            
-            return { success: true };
-        } catch (error) {
-            // 即使出错也要清理本地状态
-            this.clearLocalSession();
-            
-            console.error('登出过程中出错:', error);
-            return { success: false, error: error.message };
-        }
-    }
-
-    // 清理本地会话数据
-    clearLocalSession() {
-        try {
-            this.currentUser = null;
-            this.session = null;
-            
-            if (typeof window !== 'undefined') {
-                // 清理 Supabase 相关的本地存储
-                const keys = Object.keys(localStorage);
-                keys.forEach(key => {
-                    if (key.startsWith('sb-muawpgjdzoxhkpxghuvt-auth')) {
-                        localStorage.removeItem(key);
-                    }
-                });
+                console.log('✅ Supabase客户端初始化成功');
+                console.log('📧 当前用户:', this.currentUser?.email || '未登录');
                 
-                // 清理会话存储
-                sessionStorage.clear();
+                // 处理邮件确认链接
+                this.handleEmailConfirmation();
+                
+            } catch (error) {
+                console.error('❌ 无法加载Supabase客户端:', error);
+                console.warn('⚠️ 将以本地模式运行');
             }
-            
-            console.log('本地会话数据已清理');
-        } catch (error) {
-            console.error('清理本地会话时出错:', error);
         }
     }
     
     // 处理邮件确认
     async handleEmailConfirmation() {
-        try {
-            const { data, error } = await this.supabase.auth.getSession();
-            
-            if (error) {
-                console.error('获取会话时出错:', error);
-                return { success: false, error: error.message };
-            }
-            
-            if (data.session) {
-                this.session = data.session;
-                this.currentUser = data.session.user;
-                console.log('✅ 邮件确认成功，用户已登录:', this.currentUser.email);
-                return { success: true, user: this.currentUser };
-            }
-            
-            return { success: false, error: '未找到有效会话' };
-        } catch (error) {
-            console.error('处理邮件确认时出错:', error);
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 创建用户档案
-    async createUserProfile(userId, nickname) {
-        try {
-            const { data, error } = await this.supabase
-                .from('profiles')
-                .insert([{
-                    id: userId,
-                    nickname: nickname,
-                    created_at: new Date().toISOString()
-                }]);
-            
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 更新用户档案
-    async updateProfile(profileData) {
-        try {
-            if (!this.currentUser) {
-                throw new Error('用户未登录');
-            }
-            
-            console.log('💾 更新用户档案:', profileData);
-            
-            // 先获取现有档案数据
-            const existingProfile = await this.getUserProfile(this.currentUser.id);
-            if (!existingProfile.success) {
-                throw new Error('无法获取现有档案数据');
-            }
-            
-            // 合并现有数据和新数据
-            const updateData = {
-                id: this.currentUser.id,
-                ...existingProfile.data,  // 保留现有数据
-                ...profileData,          // 覆盖新数据
-                updated_at: new Date().toISOString()
-            };
-            console.log('📝 更新数据:', updateData);
-            
-            const { data, error } = await this.supabase
-                .from('profiles')
-                .upsert(updateData)
-                .select();
-            
-            if (error) {
-                console.error('❌ 更新档案失败:', error);
-                throw error;
-            }
-            
-            console.log('✅ 档案更新成功:', data);
-            return { success: true, data };
-        } catch (error) {
-            console.error('❌ updateProfile 错误:', error);
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 上传头像
-    async uploadAvatar(file) {
-        try {
-            if (!this.currentUser) {
-                throw new Error('用户未登录');
-            }
-            
-            console.log('📤 开始上传头像:', file.name, file.size);
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${this.currentUser.id}/avatar.${fileExt}`;
-            console.log('📁 文件路径:', fileName);
-            
-            const { data, error } = await this.supabase.storage
-                .from('avatars')
-                .upload(fileName, file, {
-                    upsert: true  // 允许覆盖现有文件
-                });
-            
-            if (error) {
-                console.error('❌ 头像上传失败:', error);
-                throw error;
-            }
-            
-            console.log('✅ 头像上传成功:', data);
-            
-            // 获取公共URL
-            const { data: { publicUrl } } = this.supabase.storage
-                .from('avatars')
-                .getPublicUrl(fileName);
-            
-            console.log('🔗 获取公共URL:', publicUrl);
-            return { success: true, url: publicUrl };
-        } catch (error) {
-            console.error('❌ uploadAvatar 错误:', error);
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 保存日记
-    async saveDiary(diaryData) {
-        try {
-            if (!this.currentUser) {
-                throw new Error('用户未登录');
-            }
-            
-            console.log('💾 保存日记数据:', diaryData);
-            
-            // 处理数据格式，移除不存在的date字段
-            const processedData = {
-                title: diaryData.title,
-                content: diaryData.content,
-                location: diaryData.location || null,
-                tags: Array.isArray(diaryData.tags) ? diaryData.tags : 
-                      (typeof diaryData.tags === 'string' ? diaryData.tags.split(',').map(tag => tag.trim()).filter(Boolean) : []),
-                latitude: diaryData.latitude ? parseFloat(diaryData.latitude) : null,
-                longitude: diaryData.longitude ? parseFloat(diaryData.longitude) : null,
-                images: diaryData.images || [],
-                user_id: this.currentUser.id,
-                is_public: true,  // 显式设置为公开
-                created_at: new Date().toISOString()
-            };
-            
-            console.log('🔄 处理后的保存数据:', processedData);
-            
-            const { data, error } = await this.supabase
-                .from('diary_entries')
-                .insert([processedData])
-                .select();
-            
-            if (error) {
-                console.error('❌ Supabase保存错误:', error);
-                throw error;
-            }
-            
-            console.log('✅ 日记保存成功:', data);
-            return { success: true, data };
-        } catch (error) {
-            console.error('❌ saveDiary 详细错误:', error);
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 获取所有日记（临时方案：分别查询后合并）
-    async getAllDiaries() {
-        try {
-            console.log('🔍 开始获取所有日记...');
-            // 先获取所有日记
-            const { data: diaries, error: diaryError } = await this.supabase
-                .from('diary_entries')
-                .select('*')
-                .order('created_at', { ascending: false });
-            
-            console.log('📊 数据库查询结果:', { diaries: diaries?.length || 0, error: diaryError });
-            
-            if (diaryError) throw diaryError;
-            
-            // 获取所有用户资料
-            const { data: profiles, error: profileError } = await this.supabase
-                .from('profiles')
-                .select('id, nickname, avatar_url');
-            
-            console.log('👤 用户资料查询结果:', { profiles: profiles?.length || 0, error: profileError });
-            
-            if (profileError) throw profileError;
-            
-            // 获取当前用户的收藏状态
-            let userLikes = [];
-            if (this.currentUser) {
-                const { data: likes, error: likesError } = await this.supabase
-                    .from('diary_likes')
-                    .select('diary_id')
-                    .eq('user_id', this.currentUser.id);
-                
-                console.log('❤️ 用户收藏查询结果:', { likes: likes?.length || 0, error: likesError });
-                
-                if (!likesError) {
-                    userLikes = likes.map(like => like.diary_id);
-                }
-            }
-            
-            // 创建用户ID到资料的映射
-            const profileMap = profiles.reduce((acc, profile) => {
-                acc[profile.id] = profile;
-                return acc;
-            }, {});
-            
-            // 按用户分组并添加用户资料和收藏状态
-            const groupedByUser = diaries.reduce((acc, entry) => {
-                const userId = entry.user_id;
-                if (!acc[userId]) {
-                    acc[userId] = {
-                        user: profileMap[userId] || { nickname: '未知用户', avatar_url: null },
-                        entries: []
-                    };
-                }
-                
-                // 添加收藏状态
-                entry.favorited = userLikes.includes(entry.id);
-                acc[userId].entries.push(entry);
-                return acc;
-            }, {});
-            
-            console.log('📊 最终分组结果:', { 
-                totalUsers: Object.keys(groupedByUser).length,
-                totalEntries: diaries.length,
-                usersWithEntries: Object.entries(groupedByUser).map(([userId, data]) => ({
-                    userId,
-                    nickname: data.user.nickname,
-                    entriesCount: data.entries.length
-                }))
-            });
-            
-            return { success: true, data: groupedByUser };
-        } catch (error) {
-            console.error('❌ getAllDiaries 错误:', error);
-            return { success: false, error: error.message };
-        }
-    }
-
-    // 获取单个日记
-    async getDiary(diaryId) {
-        try {
-            const { data, error } = await this.supabase
-                .from('diary_entries')
-                .select('*')
-                .eq('id', diaryId)
-                .single();
-            
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-
-    // 获取当前用户的日记
-    async getUserDiaries() {
-        try {
-            if (!this.currentUser) {
-                throw new Error('用户未登录');
-            }
-
-            const { data: diaries, error } = await this.supabase
-                .from('diary_entries')
-                .select('*')
-                .eq('user_id', this.currentUser.id)
-                .order('created_at', { ascending: false });
-            
-            if (error) throw error;
-            
-            return { success: true, data: diaries || [] };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-
-    // 更新日记
-    async updateDiary(diaryId, diaryData) {
-        try {
-            if (!this.currentUser) {
-                throw new Error('用户未登录');
-            }
-
-            console.log('📝 更新日记数据:', diaryData);
-            
-            // 数据格式处理和验证 - 移除不存在的date字段
-            const processedData = {
-                title: diaryData.title,
-                content: diaryData.content,
-                location: diaryData.location || null,
-                tags: Array.isArray(diaryData.tags) ? diaryData.tags : 
-                      (typeof diaryData.tags === 'string' ? diaryData.tags.split(',').map(tag => tag.trim()).filter(Boolean) : []),
-                latitude: diaryData.latitude ? parseFloat(diaryData.latitude) : null,
-                longitude: diaryData.longitude ? parseFloat(diaryData.longitude) : null,
-                images: diaryData.images || [],
-                updated_at: new Date().toISOString()
-            };
-            
-            // 注意：数据库表中没有date字段，只有created_at字段
-            // 如果需要用户自定义日期，需要先添加该字段到数据库
-            console.log('⚠️ 注意：数据库表中没有date字段，跳过日期处理');
-            
-            console.log('🔄 处理后的数据:', processedData);
-
-            const { data, error } = await this.supabase
-                .from('diary_entries')
-                .update(processedData)
-                .eq('id', diaryId)
-                .eq('user_id', this.currentUser.id) // 确保只能编辑自己的日记
-                .select();
-            
-            if (error) {
-                console.error('❌ Supabase更新错误:', error);
-                throw error;
-            }
-            
-            console.log('✅ 日记更新成功:', data);
-            return { success: true, data };
-        } catch (error) {
-            console.error('❌ updateDiary 详细错误:', error);
-            return { success: false, error: error.message };
-        }
-    }
-
-    // 删除日记
-    async deleteDiary(diaryId) {
-        try {
-            if (!this.currentUser) {
-                throw new Error('用户未登录');
-            }
-
-            const { error } = await this.supabase
-                .from('diary_entries')
-                .delete()
-                .eq('id', diaryId)
-                .eq('user_id', this.currentUser.id); // 确保只能删除自己的日记
-            
-            if (error) throw error;
-            return { success: true };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 切换日记收藏状态
-    async toggleDiaryLike(diaryId) {
-        try {
-            if (!this.currentUser) {
-                throw new Error('用户未登录');
-            }
-
-            // 先检查是否已经收藏
-            const { data: existingLike, error: checkError } = await this.supabase
-                .from('diary_likes')
-                .select('id')
-                .eq('diary_id', diaryId)
-                .eq('user_id', this.currentUser.id)
-                .single();
-
-            if (checkError && checkError.code !== 'PGRST116') {
-                throw checkError;
-            }
-
-            if (existingLike) {
-                // 已收藏，取消收藏
-                const { error } = await this.supabase
-                    .from('diary_likes')
-                    .delete()
-                    .eq('diary_id', diaryId)
-                    .eq('user_id', this.currentUser.id);
-                
-                if (error) throw error;
-                return { success: true, isLiked: false };
-            } else {
-                // 未收藏，添加收藏
-                const { error } = await this.supabase
-                    .from('diary_likes')
-                    .insert([{
-                        diary_id: diaryId,
-                        user_id: this.currentUser.id,
-                        created_at: new Date().toISOString()
-                    }]);
-                
-                if (error) throw error;
-                return { success: true, isLiked: true };
-            }
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 检查日记是否被当前用户收藏
-    async isDiaryLiked(diaryId) {
-        try {
-            if (!this.currentUser) {
-                return { success: true, isLiked: false };
-            }
-
-            const { data, error } = await this.supabase
-                .from('diary_likes')
-                .select('id')
-                .eq('diary_id', diaryId)
-                .eq('user_id', this.currentUser.id)
-                .single();
-
-            if (error && error.code !== 'PGRST116') {
-                throw error;
-            }
-
-            return { success: true, isLiked: !!data };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 获取用户档案
-    async getUserProfile(userId) {
-        try {
-            console.log('🔍 查询用户档案:', userId);
-            const { data, error } = await this.supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
-            
-            if (error) {
-                console.error('❌ 查询用户档案失败:', error);
-                
-                // 如果是因为记录不存在，尝试创建档案
-                if (error.code === 'PGRST116') {
-                    console.log('📝 档案不存在，尝试创建...');
-                    const user = this.getCurrentUser();
-                    if (user) {
-                        const nickname = user.email.split('@')[0];
-                        const createResult = await this.createUserProfile(userId, nickname);
-                        if (createResult.success) {
-                            // 重新查询档案
-                            return await this.getUserProfile(userId);
-                        }
-                    }
-                }
-                throw error;
-            }
-            
-            console.log('✅ 用户档案查询成功:', data);
-            return { success: true, data };
-        } catch (error) {
-            console.error('❌ getUserProfile 错误:', error);
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 检查是否已登录
-    isLoggedIn() {
-        return !!this.currentUser;
-    }
-    
-    // 获取当前用户
-    getCurrentUser() {
-        return this.currentUser;
-    }
-    
-    // 更新UI为已登录状态
-    updateUIForLoggedInUser() {
-        // 显示用户信息和登出按钮
-        const loginSection = document.getElementById('login-section');
-        const userSection = document.getElementById('user-section');
+        const urlParams = new URLSearchParams(window.location.search);
+        const accessToken = urlParams.get('access_token');
+        const refreshToken = urlParams.get('refresh_token');
+        const type = urlParams.get('type');
+        const error = urlParams.get('error');
+        const errorDescription = urlParams.get('error_description');
         
-        if (loginSection) loginSection.style.display = 'none';
-        if (userSection) userSection.style.display = 'block';
-        
-        // 同步全局认证状态
-        if (typeof window.syncAuthState === 'function') {
-            window.syncAuthState();
+        if (error) {
+            console.error('邮件确认错误:', error, errorDescription);
+            this.showMessage('邮件确认失败：' + (errorDescription || error), 'error');
+            return;
         }
         
-        // 更新用户信息显示
-        this.updateUserDisplay();
-        
-        // 启用云端模式
-        this.enableCloudMode();
-    }
-    
-    // 更新UI为未登录状态
-    updateUIForLoggedOutUser() {
-        const loginSection = document.getElementById('login-section');
-        const userSection = document.getElementById('user-section');
-        
-        if (loginSection) loginSection.style.display = 'block';
-        if (userSection) userSection.style.display = 'none';
-        
-        // 同步全局认证状态
-        if (typeof window.syncAuthState === 'function') {
-            window.syncAuthState();
-        }
-        
-        // 禁用云端模式
-        this.disableCloudMode();
-    }
-    
-    // 更新用户信息显示
-    async updateUserDisplay() {
-        if (!this.currentUser) return;
-        
-        try {
-            const profileResult = await this.getUserProfile(this.currentUser.id);
-            if (profileResult.success) {
-                const profile = profileResult.data;
-                
-                // 更新头像
-                const avatarImg = document.getElementById('user-avatar');
-                if (avatarImg && profile.avatar_url) {
-                    avatarImg.src = profile.avatar_url;
-                }
-                
-                // 更新昵称
-                const nicknameSpan = document.getElementById('user-nickname');
-                if (nicknameSpan) {
-                    nicknameSpan.textContent = profile.nickname || this.currentUser.email;
-                }
-            }
-        } catch (error) {
-            console.error('更新用户显示失败:', error);
-        }
-    }
-    
-    // 启用云端模式
-    enableCloudMode() {
-        // 显示云端功能按钮
-        const cloudButtons = document.querySelectorAll('.cloud-feature');
-        cloudButtons.forEach(btn => btn.style.display = 'inline-block');
-        
-        // 不再自动加载云端日记，让用户手动切换到共享视图
-        console.log('✅ 云端模式已启用');
-    }
-    
-    // 禁用云端模式
-    disableCloudMode() {
-        const cloudButtons = document.querySelectorAll('.cloud-feature');
-        cloudButtons.forEach(btn => btn.style.display = 'none');
-    }
-    // 安全解析图片数据
-    parseImages(images) {
-        try {
-            if (!images) return [];
-            if (typeof images === 'string') {
-                // 如果是空字符串或只有空白字符
-                if (!images.trim()) return [];
-                return JSON.parse(images);
-            }
-            if (Array.isArray(images)) {
-                return images;
-            }
-            return [];
-        } catch (error) {
-            console.warn('解析图片数据失败:', error, '原始数据:', images);
-            return [];
-        }
-    }
-}
-
-// 全局Supabase客户端实例
-window.supabaseClient = new SupabaseClient();
-=======
-// Supabase 客户端配置
-class SupabaseClient {
-    constructor() {
-        // 这些配置需要从Supabase项目中获取
-        this.supabaseUrl = 'https://muawpgjdzoxhkpxghuvt.supabase.co';
-        this.supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11YXdwZ2pkem94aGtweGdodXZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwMjMzMDIsImV4cCI6MjA2OTU5OTMwMn0.lfZkqfjNS7aE1SZMelabuayNz0niOsqTzszBBl9Pfzk';
-        this.supabase = null;
-        this.currentUser = null;
-        this.session = null;
-        
-        this.init();
-    }
-    
-    async init() {
-        // 动态加载Supabase
-        if (typeof window !== 'undefined') {
+        if (type === 'signup' && accessToken && refreshToken) {
             try {
-                const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-                this.supabase = createClient(this.supabaseUrl, this.supabaseKey, {
-                    auth: {
-                        autoRefreshToken: true,
-                        persistSession: true,
-                        detectSessionInUrl: false
-                    }
+                console.log('🔑 处理邮件确认...');
+                
+                // 设置会话
+                const { data, error } = await this.supabase.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken
                 });
                 
-                // 监听认证状态变化
-                this.supabase.auth.onAuthStateChange((event, session) => {
-                    console.log('认证状态变化:', event, session?.user?.email);
-                    this.session = session;
-                    this.currentUser = session?.user || null;
-                    this.onAuthStateChange(event, session);
-                });
-                
-                // 检查现有会话
-                const { data: { session }, error } = await this.supabase.auth.getSession();
                 if (error) {
-                    console.error('获取会话时出错:', error);
-                    // 清理可能损坏的会话数据
-                    localStorage.removeItem('sb-muawpgjdzoxhkpxghuvt-auth-token');
+                    console.error('设置会话失败:', error);
+                    this.showMessage('邮件确认失败，请重新尝试', 'error');
+                    return;
                 }
-                this.session = session;
-                this.currentUser = session?.user || null;
+                
+                console.log('✅ 邮件确认成功');
+                this.showMessage('邮件验证成功！欢迎加入数字旅行记忆馆！', 'success');
+                
+                // 清理URL参数
+                window.history.replaceState({}, document.title, window.location.pathname);
                 
             } catch (error) {
-                console.error('Supabase初始化失败:', error);
+                console.error('邮件确认处理错误:', error);
+                this.showMessage('邮件确认出现错误，请重新尝试', 'error');
             }
         }
     }
     
+    // 认证状态变化处理
     onAuthStateChange(event, session) {
-        // 认证状态变化时的回调
-        if (event === 'SIGNED_IN') {
-            console.log('用户已登录');
-            this.updateUIForLoggedInUser();
+        if (event === 'SIGNED_IN' && session) {
+            console.log('用户已登录:', session.user.email);
+            // 更新UI
+            if (typeof updateAuthUI === 'function') {
+                updateAuthUI();
+            }
+            // 重新加载数据
+            if (typeof loadDiaries === 'function') {
+                loadDiaries();
+            }
         } else if (event === 'SIGNED_OUT') {
             console.log('用户已登出');
-            this.updateUIForLoggedOutUser();
+            // 更新UI
+            if (typeof updateAuthUI === 'function') {
+                updateAuthUI();
+            }
+            // 重新加载数据
+            if (typeof loadDiaries === 'function') {
+                loadDiaries();
+            }
         }
     }
     
     // 用户注册
     async signUp(email, password, nickname) {
+        if (!this.supabase) {
+            throw new Error('Supabase 客户端未初始化');
+        }
+        
         try {
+            console.log('📝 开始用户注册...');
+            
+            // 获取当前网站的URL
+            const siteUrl = window.location.origin;
+            
             const { data, error } = await this.supabase.auth.signUp({
-                email,
-                password,
+                email: email,
+                password: password,
                 options: {
                     data: {
                         nickname: nickname
-                    }
+                    },
+                    // 设置邮件重定向URL为当前网站
+                    emailRedirectTo: siteUrl
                 }
             });
             
-            if (error) throw error;
-            
-            // 创建用户档案
-            if (data.user) {
-                await this.createUserProfile(data.user.id, nickname);
+            if (error) {
+                console.error('注册错误:', error);
+                throw error;
             }
             
-            return { success: true, data };
+            console.log('✅ 用户注册成功');
+            return data;
+            
         } catch (error) {
-            return { success: false, error: error.message };
+            console.error('注册失败:', error);
+            throw error;
         }
     }
     
     // 用户登录
     async signIn(email, password) {
+        if (!this.supabase) {
+            throw new Error('Supabase 客户端未初始化');
+        }
+        
         try {
+            console.log('🔐 开始用户登录...');
+            
             const { data, error } = await this.supabase.auth.signInWithPassword({
-                email,
-                password
+                email: email,
+                password: password
             });
             
-            if (error) throw error;
-            return { success: true, data };
+            if (error) {
+                console.error('登录错误:', error);
+                throw error;
+            }
+            
+            console.log('✅ 用户登录成功');
+            return data;
+            
         } catch (error) {
-            return { success: false, error: error.message };
+            console.error('登录失败:', error);
+            throw error;
         }
     }
     
     // 用户登出
     async signOut() {
+        if (!this.supabase) {
+            throw new Error('Supabase 客户端未初始化');
+        }
+        
         try {
-            // 使用 local 作用域而不是 global，避免 403 错误
-            const { error } = await this.supabase.auth.signOut({ scope: 'local' });
+            console.log('👋 用户登出...');
+            const { error } = await this.supabase.auth.signOut();
+            
             if (error) {
-                console.warn('Supabase 登出错误:', error);
-                // 即使 Supabase 返回错误，也清理本地状态
+                console.error('登出错误:', error);
+                throw error;
             }
             
-            // 清理本地会话数据
-            this.clearLocalSession();
+            console.log('✅ 用户登出成功');
             
-            return { success: true };
         } catch (error) {
-            // 即使出错也要清理本地状态
-            this.clearLocalSession();
-            
-            console.error('登出过程中出错:', error);
-            return { success: false, error: error.message };
+            console.error('登出失败:', error);
+            throw error;
         }
-    }
-
-    // 清理本地会话数据
-    clearLocalSession() {
-        try {
-            this.currentUser = null;
-            this.session = null;
-            
-            if (typeof window !== 'undefined') {
-                // 清理 Supabase 相关的本地存储
-                const keys = Object.keys(localStorage);
-                keys.forEach(key => {
-                    if (key.startsWith('sb-muawpgjdzoxhkpxghuvt-auth')) {
-                        localStorage.removeItem(key);
-                    }
-                });
-                
-                // 清理会话存储
-                sessionStorage.clear();
-            }
-            
-            console.log('本地会话数据已清理');
-        } catch (error) {
-            console.error('清理本地会话时出错:', error);
-        }
-    }
-    
-    // 创建用户档案
-    async createUserProfile(userId, nickname) {
-        try {
-            const { data, error } = await this.supabase
-                .from('profiles')
-                .insert([{
-                    id: userId,
-                    nickname: nickname,
-                    created_at: new Date().toISOString()
-                }]);
-            
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 更新用户档案
-    async updateProfile(profileData) {
-        try {
-            if (!this.currentUser) {
-                throw new Error('用户未登录');
-            }
-            
-            const { data, error } = await this.supabase
-                .from('profiles')
-                .upsert({
-                    id: this.currentUser.id,
-                    ...profileData,
-                    updated_at: new Date().toISOString()
-                })
-                .select();
-            
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 上传头像
-    async uploadAvatar(file) {
-        try {
-            if (!this.currentUser) {
-                throw new Error('用户未登录');
-            }
-            
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${this.currentUser.id}/${Date.now()}.${fileExt}`;
-            
-            const { data, error } = await this.supabase.storage
-                .from('avatars')
-                .upload(fileName, file, {
-                    upsert: false
-                });
-            
-            if (error) throw error;
-            
-            // 获取公共URL
-            const { data: { publicUrl } } = this.supabase.storage
-                .from('avatars')
-                .getPublicUrl(fileName);
-            
-            return { success: true, url: publicUrl };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 保存日记
-    async saveDiary(diaryData) {
-        try {
-            if (!this.currentUser) {
-                throw new Error('用户未登录');
-            }
-            
-            const { data, error } = await this.supabase
-                .from('diary_entries')
-                .insert([{
-                    ...diaryData,
-                    user_id: this.currentUser.id,
-                    is_public: true,  // 显式设置为公开
-                    created_at: new Date().toISOString()
-                }])
-                .select();
-            
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 获取所有日记（临时方案：分别查询后合并）
-    async getAllDiaries() {
-        try {
-            // 先获取所有日记
-            const { data: diaries, error: diaryError } = await this.supabase
-                .from('diary_entries')
-                .select('*')
-                .order('created_at', { ascending: false });
-            
-            if (diaryError) throw diaryError;
-            
-            // 获取所有用户资料
-            const { data: profiles, error: profileError } = await this.supabase
-                .from('profiles')
-                .select('id, nickname, avatar_url');
-            
-            if (profileError) throw profileError;
-            
-            // 创建用户ID到资料的映射
-            const profileMap = profiles.reduce((acc, profile) => {
-                acc[profile.id] = profile;
-                return acc;
-            }, {});
-            
-            // 按用户分组并添加用户资料
-            const groupedByUser = diaries.reduce((acc, entry) => {
-                const userId = entry.user_id;
-                if (!acc[userId]) {
-                    acc[userId] = {
-                        user: profileMap[userId] || { nickname: '未知用户', avatar_url: null },
-                        entries: []
-                    };
-                }
-                acc[userId].entries.push(entry);
-                return acc;
-            }, {});
-            
-            return { success: true, data: groupedByUser };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-
-    // 获取单个日记
-    async getDiary(diaryId) {
-        try {
-            const { data, error } = await this.supabase
-                .from('diary_entries')
-                .select('*')
-                .eq('id', diaryId)
-                .single();
-            
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-
-    // 获取当前用户的日记
-    async getUserDiaries() {
-        try {
-            if (!this.currentUser) {
-                throw new Error('用户未登录');
-            }
-
-            const { data: diaries, error } = await this.supabase
-                .from('diary_entries')
-                .select('*')
-                .eq('user_id', this.currentUser.id)
-                .order('created_at', { ascending: false });
-            
-            if (error) throw error;
-            
-            return { success: true, data: diaries || [] };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-
-    // 更新日记
-    async updateDiary(diaryId, diaryData) {
-        try {
-            if (!this.currentUser) {
-                throw new Error('用户未登录');
-            }
-
-            const { data, error } = await this.supabase
-                .from('diary_entries')
-                .update({
-                    ...diaryData,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', diaryId)
-                .eq('user_id', this.currentUser.id) // 确保只能编辑自己的日记
-                .select();
-            
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-
-    // 删除日记
-    async deleteDiary(diaryId) {
-        try {
-            if (!this.currentUser) {
-                throw new Error('用户未登录');
-            }
-
-            const { error } = await this.supabase
-                .from('diary_entries')
-                .delete()
-                .eq('id', diaryId)
-                .eq('user_id', this.currentUser.id); // 确保只能删除自己的日记
-            
-            if (error) throw error;
-            return { success: true };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 获取用户档案
-    async getUserProfile(userId) {
-        try {
-            const { data, error } = await this.supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
-            
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // 检查是否已登录
-    isLoggedIn() {
-        return !!this.currentUser;
     }
     
     // 获取当前用户
@@ -1123,166 +225,349 @@ class SupabaseClient {
         return this.currentUser;
     }
     
-    // 更新UI为已登录状态
-    updateUIForLoggedInUser() {
-        // 显示用户信息和登出按钮
-        const loginSection = document.getElementById('login-section');
-        const userSection = document.getElementById('user-section');
-        
-        if (loginSection) loginSection.style.display = 'none';
-        if (userSection) userSection.style.display = 'block';
-        
-        // 更新用户信息显示
-        this.updateUserDisplay();
-        
-        // 启用云端模式
-        this.enableCloudMode();
+    // 检查是否已登录
+    isAuthenticated() {
+        return this.currentUser !== null;
     }
     
-    // 更新UI为未登录状态
-    updateUIForLoggedOutUser() {
-        const loginSection = document.getElementById('login-section');
-        const userSection = document.getElementById('user-section');
-        
-        if (loginSection) loginSection.style.display = 'block';
-        if (userSection) userSection.style.display = 'none';
-        
-        // 禁用云端模式
-        this.disableCloudMode();
-    }
-    
-    // 更新用户信息显示
-    async updateUserDisplay() {
-        if (!this.currentUser) return;
+    // 获取用户资料
+    async getUserProfile() {
+        if (!this.supabase || !this.currentUser) {
+            return null;
+        }
         
         try {
-            const profileResult = await this.getUserProfile(this.currentUser.id);
-            if (profileResult.success) {
-                const profile = profileResult.data;
-                
-                // 更新头像
-                const avatarImg = document.getElementById('user-avatar');
-                if (avatarImg && profile.avatar_url) {
-                    avatarImg.src = profile.avatar_url;
+            const { data, error } = await this.supabase
+                .from('user_profiles')
+                .select('*')
+                .eq('user_id', this.currentUser.id)
+                .single();
+            
+            if (error) {
+                if (error.code === 'PGRST116') {
+                    // 没有找到用户资料，返回默认数据
+                    return {
+                        user_id: this.currentUser.id,
+                        email: this.currentUser.email,
+                        nickname: this.currentUser.user_metadata.nickname || '旅行者',
+                        bio: '',
+                        avatar_url: null
+                    };
                 }
-                
-                // 更新昵称
-                const nicknameSpan = document.getElementById('user-nickname');
-                if (nicknameSpan) {
-                    nicknameSpan.textContent = profile.nickname || this.currentUser.email;
-                }
+                console.error('获取用户资料失败:', error);
+                return null;
             }
+            
+            return data;
+            
         } catch (error) {
-            console.error('更新用户显示失败:', error);
+            console.error('获取用户资料失败:', error);
+            return null;
         }
     }
     
-    // 启用云端模式
-    enableCloudMode() {
-        // 显示云端功能按钮
-        const cloudButtons = document.querySelectorAll('.cloud-feature');
-        cloudButtons.forEach(btn => btn.style.display = 'inline-block');
+    // 更新用户资料
+    async updateUserProfile(profileData) {
+        if (!this.supabase || !this.currentUser) {
+            throw new Error('用户未登录');
+        }
         
-        // 加载云端日记
-        this.loadCloudDiaries();
-    }
-    
-    // 禁用云端模式
-    disableCloudMode() {
-        const cloudButtons = document.querySelectorAll('.cloud-feature');
-        cloudButtons.forEach(btn => btn.style.display = 'none');
-    }
-    
-    // 加载云端日记
-    async loadCloudDiaries() {
         try {
-            const result = await this.getAllDiaries();
-            if (result.success) {
-                this.displaySharedDiaries(result.data);
+            console.log('📝 更新用户资料...');
+            
+            const { data, error } = await this.supabase
+                .from('user_profiles')
+                .upsert({
+                    user_id: this.currentUser.id,
+                    email: this.currentUser.email,
+                    ...profileData,
+                    updated_at: new Date().toISOString()
+                })
+                .select()
+                .single();
+            
+            if (error) {
+                console.error('更新用户资料失败:', error);
+                throw error;
             }
+            
+            console.log('✅ 用户资料更新成功');
+            return data;
+            
         } catch (error) {
-            console.error('加载云端日记失败:', error);
+            console.error('更新用户资料失败:', error);
+            throw error;
         }
     }
     
-    // 显示共享日记
-    displaySharedDiaries(groupedDiaries) {
-        const container = document.getElementById('shared-diaries-container');
-        if (!container) return;
+    // 上传用户头像
+    async uploadAvatar(file) {
+        if (!this.supabase || !this.currentUser) {
+            throw new Error('用户未登录');
+        }
         
-        container.innerHTML = '';
-        
-        Object.entries(groupedDiaries).forEach(([userId, userData]) => {
-            const userSection = document.createElement('div');
-            userSection.className = 'user-diary-section';
-            
-            const userHeader = document.createElement('div');
-            userHeader.className = 'user-header';
-            userHeader.innerHTML = `
-                <img src="${userData.user.avatar_url || './default-avatar.svg'}" alt="头像" class="user-avatar-small">
-                <h3>${userData.user.nickname}</h3>
-                <span class="diary-count">${userData.entries.length} 篇日记</span>
-            `;
-            
-            const entriesContainer = document.createElement('div');
-            entriesContainer.className = 'user-entries';
-            
-            userData.entries.forEach(entry => {
-                const entryElement = this.createDiaryEntryElement(entry);
-                entriesContainer.appendChild(entryElement);
-            });
-            
-            userSection.appendChild(userHeader);
-            userSection.appendChild(entriesContainer);
-            container.appendChild(userSection);
-        });
-    }
-    
-    // 创建日记条目元素
-    createDiaryEntryElement(entry) {
-        const entryDiv = document.createElement('div');
-        entryDiv.className = 'shared-diary-entry';
-        
-        entryDiv.innerHTML = `
-            <div class="entry-header">
-                <h4>${entry.title || '无标题'}</h4>
-                <span class="entry-date">${new Date(entry.created_at).toLocaleDateString()}</span>
-            </div>
-            <div class="entry-content">
-                <p>${entry.content}</p>
-                ${entry.images ? `<div class="entry-images">
-                    ${this.parseImages(entry.images).map(img => `<img src="${img}" alt="图片" class="entry-image-thumb">`).join('')}
-                </div>` : ''}
-            </div>
-            <div class="entry-location">
-                <i class="location-icon">📍</i>
-                <span>${entry.location || '未知位置'}</span>
-            </div>
-        `;
-        
-        return entryDiv;
-    }
-    
-    // 安全解析图片数据
-    parseImages(images) {
         try {
-            if (!images) return [];
-            if (typeof images === 'string') {
-                // 如果是空字符串或只有空白字符
-                if (!images.trim()) return [];
-                return JSON.parse(images);
+            console.log('📸 上传用户头像...');
+            
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${this.currentUser.id}/avatar.${fileExt}`;
+            
+            const { data, error } = await this.supabase.storage
+                .from('avatars')
+                .upload(fileName, file, {
+                    upsert: true
+                });
+            
+            if (error) {
+                console.error('头像上传失败:', error);
+                throw error;
             }
-            if (Array.isArray(images)) {
-                return images;
-            }
-            return [];
+            
+            console.log('✅ 头像上传成功');
+            
+            // 获取公共URL
+            const { data: { publicUrl } } = this.supabase.storage
+                .from('avatars')
+                .getPublicUrl(fileName);
+            
+            return publicUrl;
+            
         } catch (error) {
-            console.warn('解析图片数据失败:', error, '原始数据:', images);
+            console.error('头像上传失败:', error);
+            throw error;
+        }
+    }
+    
+    // 保存日记到云端
+    async saveDiary(diaryData) {
+        if (!this.supabase || !this.currentUser) {
+            throw new Error('用户未登录');
+        }
+        
+        try {
+            console.log('☁️ 保存日记到云端...');
+            
+            // 准备日记数据
+            const diaryToSave = {
+                user_id: this.currentUser.id,
+                title: diaryData.title,
+                content: diaryData.content,
+                location: diaryData.location,
+                latitude: diaryData.latitude ? parseFloat(diaryData.latitude) : null,
+                longitude: diaryData.longitude ? parseFloat(diaryData.longitude) : null,
+                tags: Array.isArray(diaryData.tags) ? diaryData.tags : diaryData.tags.split(',').map(tag => tag.trim()),
+                diary_date: diaryData.date,
+                is_favorite: diaryData.isFavorite || false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
+            
+            // 如果有ID，则更新；否则创建新记录
+            let result;
+            if (diaryData.id) {
+                diaryToSave.updated_at = new Date().toISOString();
+                const { data, error } = await this.supabase
+                    .from('travel_diaries')
+                    .update(diaryToSave)
+                    .eq('id', diaryData.id)
+                    .eq('user_id', this.currentUser.id)
+                    .select()
+                    .single();
+                
+                if (error) throw error;
+                result = data;
+            } else {
+                const { data, error } = await this.supabase
+                    .from('travel_diaries')
+                    .insert(diaryToSave)
+                    .select()
+                    .single();
+                
+                if (error) throw error;
+                result = data;
+            }
+            
+            console.log('✅ 日记保存到云端成功');
+            
+            // 如果有图片，上传图片
+            if (diaryData.images && diaryData.images.length > 0) {
+                const imageUrls = await this.uploadDiaryImages(result.id, diaryData.images);
+                
+                // 更新日记的图片URL
+                const { error: updateError } = await this.supabase
+                    .from('travel_diaries')
+                    .update({ image_urls: imageUrls })
+                    .eq('id', result.id);
+                
+                if (updateError) {
+                    console.error('更新图片URL失败:', updateError);
+                } else {
+                    result.image_urls = imageUrls;
+                }
+            }
+            
+            return result;
+            
+        } catch (error) {
+            console.error('保存日记到云端失败:', error);
+            throw error;
+        }
+    }
+    
+    // 上传日记图片
+    async uploadDiaryImages(diaryId, images) {
+        if (!this.supabase || !this.currentUser) {
+            throw new Error('用户未登录');
+        }
+        
+        try {
+            console.log('📸 上传日记图片...');
+            
+            const imageUrls = [];
+            
+            for (let i = 0; i < images.length; i++) {
+                const file = images[i];
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${this.currentUser.id}/${diaryId}/image_${i + 1}.${fileExt}`;
+                
+                const { data, error } = await this.supabase.storage
+                    .from('diary-images')
+                    .upload(fileName, file, {
+                        upsert: true
+                    });
+                
+                if (error) {
+                    console.error(`图片 ${i + 1} 上传失败:`, error);
+                    continue;
+                }
+                
+                // 获取公共URL
+                const { data: { publicUrl } } = this.supabase.storage
+                    .from('diary-images')
+                    .getPublicUrl(fileName);
+                
+                imageUrls.push(publicUrl);
+            }
+            
+            console.log('✅ 日记图片上传完成');
+            return imageUrls;
+            
+        } catch (error) {
+            console.error('上传日记图片失败:', error);
+            throw error;
+        }
+    }
+    
+    // 获取用户的所有日记
+    async getAllDiaries() {
+        if (!this.supabase || !this.currentUser) {
             return [];
+        }
+        
+        try {
+            console.log('📖 从云端获取所有日记...');
+            
+            const { data, error } = await this.supabase
+                .from('travel_diaries')
+                .select('*')
+                .eq('user_id', this.currentUser.id)
+                .order('diary_date', { ascending: false });
+            
+            if (error) {
+                console.error('获取日记失败:', error);
+                return [];
+            }
+            
+            console.log(`✅ 从云端获取了 ${data.length} 条日记`);
+            return data;
+            
+        } catch (error) {
+            console.error('获取日记失败:', error);
+            return [];
+        }
+    }
+    
+    // 删除日记
+    async deleteDiary(diaryId) {
+        if (!this.supabase || !this.currentUser) {
+            throw new Error('用户未登录');
+        }
+        
+        try {
+            console.log('🗑️ 删除云端日记...');
+            
+            const { error } = await this.supabase
+                .from('travel_diaries')
+                .delete()
+                .eq('id', diaryId)
+                .eq('user_id', this.currentUser.id);
+            
+            if (error) {
+                console.error('删除日记失败:', error);
+                throw error;
+            }
+            
+            console.log('✅ 云端日记删除成功');
+            
+        } catch (error) {
+            console.error('删除日记失败:', error);
+            throw error;
+        }
+    }
+    
+    // 切换收藏状态
+    async toggleFavorite(diaryId, isFavorite) {
+        if (!this.supabase || !this.currentUser) {
+            throw new Error('用户未登录');
+        }
+        
+        try {
+            console.log('⭐ 更新收藏状态...');
+            
+            const { data, error } = await this.supabase
+                .from('travel_diaries')
+                .update({ 
+                    is_favorite: isFavorite,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', diaryId)
+                .eq('user_id', this.currentUser.id)
+                .select()
+                .single();
+            
+            if (error) {
+                console.error('更新收藏状态失败:', error);
+                throw error;
+            }
+            
+            console.log('✅ 收藏状态更新成功');
+            return data;
+            
+        } catch (error) {
+            console.error('更新收藏状态失败:', error);
+            throw error;
+        }
+    }
+    
+    // 显示消息
+    showMessage(message, type = 'info') {
+        console.log(`[${type.toUpperCase()}] ${message}`);
+        
+        // 如果页面有显示消息的函数，调用它
+        if (typeof window.showMessage === 'function') {
+            window.showMessage(message, type);
+        } else {
+            // 简单的alert显示
+            if (type === 'error') {
+                alert('错误: ' + message);
+            } else if (type === 'success') {
+                alert('成功: ' + message);
+            } else {
+                alert(message);
+            }
         }
     }
 }
 
 // 全局Supabase客户端实例
 window.supabaseClient = new SupabaseClient();
->>>>>>> 75131430882a627904defc03312c42e7e3d4ade4
