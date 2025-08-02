@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OAuth测试</title>
+    <script src="supabase-client.js"></script>
+</head>
+<body>
+    <h1>GitHub OAuth 重定向测试</h1>
+    <button onclick="testRedirect()">测试GitHub登录URL</button>
+    <div id="result"></div>
+
+    <script>
+        async function testRedirect() {
+            await supabaseClient.init();
+            
+            const result = document.getElementById('result');
+            result.innerHTML = `
+                <h3>调试信息：</h3>
+                <p><strong>当前域名:</strong> ${window.location.hostname}</p>
+                <p><strong>当前完整URL:</strong> ${window.location.href}</p>
+                <p><strong>Origin:</strong> ${window.location.origin}</p>
+                <p><strong>Pathname:</strong> ${window.location.pathname}</p>
+                <hr>
+                <p>现在调用GitHub登录...</p>
+            `;
+            
+            // 调用GitHub登录方法，但不实际执行重定向
+            try {
+                console.log('开始测试GitHub登录...');
+                await supabaseClient.signInWithGitHub();
+            } catch (error) {
+                console.error('测试出错:', error);
+                result.innerHTML += `<p style="color: red;">错误: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
