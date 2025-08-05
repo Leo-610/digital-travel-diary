@@ -15,7 +15,12 @@ class SupabaseClient {
         // 动态加载Supabase
         if (typeof window !== 'undefined') {
             try {
+                console.log('🔄 开始初始化Supabase客户端...');
                 const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+                
+                console.log('✅ Supabase库加载成功');
+                console.log('🔗 连接URL:', this.supabaseUrl);
+                
                 this.supabase = createClient(this.supabaseUrl, this.supabaseKey, {
                     auth: {
                         autoRefreshToken: true,
@@ -39,6 +44,12 @@ class SupabaseClient {
                     }
                 });
                 
+                if (!this.supabase) {
+                    throw new Error('Supabase客户端创建失败');
+                }
+                
+                console.log('✅ Supabase客户端创建成功');
+                
                 // 监听认证状态变化
                 this.supabase.auth.onAuthStateChange((event, session) => {
                     console.log('认证状态变化:', event, session?.user?.email);
@@ -46,6 +57,8 @@ class SupabaseClient {
                     this.currentUser = session?.user || null;
                     this.onAuthStateChange(event, session);
                 });
+                
+                console.log('✅ 认证状态监听器已设置');
                 
                 // 检查现有会话
                 const { data: { session }, error } = await this.supabase.auth.getSession();
@@ -57,8 +70,22 @@ class SupabaseClient {
                 this.session = session;
                 this.currentUser = session?.user || null;
                 
+                console.log('✅ Supabase初始化完成');
+                
             } catch (error) {
-                console.error('Supabase初始化失败:', error);
+                console.error('❌ Supabase初始化失败:', error);
+                console.error('错误详情:', {
+                    message: error.message,
+                    stack: error.stack
+                });
+                
+                // 确保supabase为null，避免后续调用
+                this.supabase = null;
+                
+                alert('⚠️ 云端功能初始化失败\n\n' + 
+                      '原因: ' + error.message + '\n\n' +
+                      '您仍可以使用本地模式\n' +
+                      '请检查网络连接后刷新页面重试');
             }
         }
     }
@@ -161,6 +188,11 @@ class SupabaseClient {
     // 用户注册
     async signUp(email, password, nickname) {
         try {
+            // 检查Supabase是否已初始化
+            if (!this.supabase) {
+                throw new Error('Supabase客户端未初始化，请刷新页面重试');
+            }
+            
             console.log('🔄 开始注册用户:', { email, nickname });
             
             const { data, error } = await this.supabase.auth.signUp({
@@ -216,6 +248,11 @@ class SupabaseClient {
     // 用户登录
     async signIn(email, password) {
         try {
+            // 检查Supabase是否已初始化
+            if (!this.supabase) {
+                throw new Error('Supabase客户端未初始化，请刷新页面重试');
+            }
+            
             const { data, error } = await this.supabase.auth.signInWithPassword({
                 email,
                 password
@@ -838,6 +875,21 @@ class SupabaseClient {
         return this.currentUser;
     }
     
+    // 检查Supabase是否已初始化
+    isInitialized() {
+        return !!this.supabase;
+    }
+    
+    // 安全检查Supabase状态
+    checkSupabaseReady() {
+        if (!this.supabase) {
+            const error = new Error('Supabase客户端未初始化，请刷新页面重试');
+            console.error('❌', error.message);
+            throw error;
+        }
+        return true;
+    }
+    
     // 更新UI为已登录状态
     updateUIForLoggedInUser() {
         // 显示用户信息和登出按钮
@@ -1065,6 +1117,11 @@ class SupabaseClient {
     // 重新发送确认邮件
     async resendConfirmation(email = null) {
         try {
+            // 检查Supabase是否已初始化
+            if (!this.supabase) {
+                throw new Error('Supabase客户端未初始化，请刷新页面重试');
+            }
+            
             const targetEmail = email || this.currentUser?.email;
             if (!targetEmail) {
                 throw new Error('无法获取邮箱地址');
@@ -1096,6 +1153,12 @@ class SupabaseClient {
     // 诊断邮件发送问题
     async diagnoseEmailIssue(email) {
         try {
+            // 检查Supabase是否已初始化
+            if (!this.supabase) {
+                alert('❌ Supabase客户端未初始化\n\n请刷新页面重试');
+                return;
+            }
+            
             console.log('🔍 开始诊断邮件问题...');
             
             // 1. 检查Supabase项目设置
