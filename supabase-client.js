@@ -21,7 +21,7 @@ class SupabaseClient {
                         autoRefreshToken: true,
                         persistSession: true,
                         detectSessionInUrl: true,
-                        redirectTo: 'https://leo-610.github.io/digital-travel-diary',
+                        redirectTo: 'https://www.digital-travel-diary-leo.top',
                         flowType: 'implicit'
                     },
                     global: {
@@ -200,7 +200,7 @@ class SupabaseClient {
             const { data, error } = await this.supabase.auth.signInWithOAuth({
                 provider: 'github',
                 options: {
-                    redirectTo: 'https://leo-610.github.io/digital-travel-diary'
+                    redirectTo: 'https://www.digital-travel-diary-leo.top'
                 }
             });
             
