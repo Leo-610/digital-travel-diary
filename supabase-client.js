@@ -170,7 +170,7 @@ class SupabaseClient {
                     data: {
                         nickname: nickname
                     },
-                    emailRedirectTo: window.location.origin
+                    emailRedirectTo: 'https://www.digital-travel-diary-leo.top'
                 }
             });
             
@@ -186,18 +186,22 @@ class SupabaseClient {
             
             // 创建用户档案
             if (data.user && data.user.id) {
-                console.log('🔄 创建用户档案...');
+                console.log('🔄 尝试创建用户档案...');
                 const profileResult = await this.createUserProfile(data.user.id, nickname);
                 console.log('📄 档案创建结果:', profileResult);
                 
-                if (profileResult.needsVerification) {
-                    console.log('⚠️ 用户需要验证邮箱后才能完成档案创建');
-                }
+                // 不管档案创建是否成功，都认为注册成功
+                // 档案会在用户验证后自动创建
             }
             
             // 显示注册成功消息
             if (needsEmailVerification) {
-                alert('✅ 注册成功！\n\n📧 我们已向您的邮箱发送确认邮件\n请点击邮件中的链接完成验证\n\n验证后即可正常使用云端功能');
+                const resendEmail = confirm('✅ 注册成功！\n\n📧 验证邮件应该已发送到您的邮箱\n请检查邮件（包括垃圾邮件箱）\n\n❓ 如果没有收到邮件，点击"确定"重新发送\n点击"取消"稍后手动重试');
+                
+                if (resendEmail) {
+                    console.log('🔄 用户请求重新发送验证邮件');
+                    this.resendConfirmation(email);
+                }
             } else {
                 alert('✅ 注册成功！\n\n您现在可以使用云端功能了');
             }
@@ -326,12 +330,13 @@ class SupabaseClient {
             // 先检查档案是否已存在
             const { data: existingProfile, error: checkError } = await this.supabase
                 .from('profiles')
-                .select('*')
+                .select('id, nickname, created_at')
                 .eq('id', userId)
-                .single();
+                .maybeSingle();
                 
-            if (checkError && checkError.code !== 'PGRST116') {
+            if (checkError) {
                 console.log('⚠️ 检查现有档案时出错:', checkError);
+                // 继续执行，不要因为查询错误而中断
             }
             
             if (existingProfile) {
@@ -1058,13 +1063,20 @@ class SupabaseClient {
     }
     
     // 重新发送确认邮件
-    async resendConfirmation() {
+    async resendConfirmation(email = null) {
         try {
+            const targetEmail = email || this.currentUser?.email;
+            if (!targetEmail) {
+                throw new Error('无法获取邮箱地址');
+            }
+            
+            console.log('🔄 重新发送确认邮件到:', targetEmail);
+            
             const { error } = await this.supabase.auth.resend({
                 type: 'signup',
-                email: this.currentUser?.email,
+                email: targetEmail,
                 options: {
-                    emailRedirectTo: window.location.origin
+                    emailRedirectTo: 'https://www.digital-travel-diary-leo.top'
                 }
             });
             
@@ -1073,7 +1085,7 @@ class SupabaseClient {
                 alert('重发邮件失败: ' + error.message);
             } else {
                 console.log('✅ 确认邮件已重新发送');
-                alert('确认邮件已重新发送，请检查您的邮箱');
+                alert('✅ 确认邮件已重新发送！\n\n请检查您的邮箱（包括垃圾邮件箱）\n邮件可能需要几分钟才能到达');
             }
         } catch (error) {
             console.error('重发确认邮件错误:', error);
