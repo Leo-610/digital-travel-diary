@@ -200,7 +200,7 @@ class SupabaseClient {
                 
                 if (resendEmail) {
                     console.log('🔄 用户请求重新发送验证邮件');
-                    this.resendConfirmation(email);
+                    await this.resendConfirmation(email);
                 }
             } else {
                 alert('✅ 注册成功！\n\n您现在可以使用云端功能了');
@@ -1090,6 +1090,63 @@ class SupabaseClient {
         } catch (error) {
             console.error('重发确认邮件错误:', error);
             alert('重发邮件时出现错误: ' + error.message);
+        }
+    }
+    
+    // 诊断邮件发送问题
+    async diagnoseEmailIssue(email) {
+        try {
+            console.log('🔍 开始诊断邮件问题...');
+            
+            // 1. 检查Supabase项目设置
+            console.log('📧 检查邮箱:', email);
+            console.log('🔗 Supabase URL:', this.supabaseUrl);
+            console.log('🌐 重定向URL: https://www.digital-travel-diary-leo.top');
+            
+            // 2. 尝试多种方式发送邮件
+            const methods = [
+                {
+                    name: '标准注册确认',
+                    action: () => this.supabase.auth.resend({
+                        type: 'signup', 
+                        email: email,
+                        options: {
+                            emailRedirectTo: 'https://www.digital-travel-diary-leo.top'
+                        }
+                    })
+                },
+                {
+                    name: '简单重发',
+                    action: () => this.supabase.auth.resend({
+                        type: 'signup', 
+                        email: email
+                    })
+                }
+            ];
+            
+            for (const method of methods) {
+                try {
+                    console.log(`🧪 尝试方法: ${method.name}`);
+                    const { error } = await method.action();
+                    
+                    if (error) {
+                        console.error(`❌ ${method.name} 失败:`, error);
+                    } else {
+                        console.log(`✅ ${method.name} 成功`);
+                        alert(`✅ 邮件发送成功！\n\n方法: ${method.name}\n请检查您的邮箱（包括垃圾邮件箱）`);
+                        return;
+                    }
+                } catch (err) {
+                    console.error(`❌ ${method.name} 异常:`, err);
+                }
+            }
+            
+            // 如果所有方法都失败，显示详细诊断信息
+            alert('❌ 邮件发送遇到问题\n\n可能原因：\n1. Supabase项目邮件配置问题\n2. 邮箱地址格式不正确\n3. 网络连接问题\n\n请检查控制台获取详细信息');
+            
+        } catch (error) {
+            console.error('🚨 诊断过程出错:', error);
+            alert('诊断过程出错: ' + error.message);
         }
     }
 }
