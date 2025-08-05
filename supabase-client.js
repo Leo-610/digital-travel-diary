@@ -75,8 +75,12 @@ class SupabaseClient {
                 const cleanUrl = window.location.origin + window.location.pathname;
                 window.history.replaceState({}, document.title, cleanUrl);
                 
-                // 显示简单错误提示
-                alert('GitHub登录失败: ' + (errorDescription || error));
+                // 特殊处理重复邮箱错误
+                if (errorDescription?.includes('Multiple accounts with the same email address')) {
+                    alert('❌ 账户冲突：该邮箱已注册过邮箱账户\n\n解决方案：\n1. 使用邮箱+密码登录\n2. 或者联系管理员合并账户');
+                } else {
+                    alert('GitHub登录失败: ' + (errorDescription || error));
+                }
                 return;
             }
         }
