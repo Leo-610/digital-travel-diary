@@ -1,4 +1,5 @@
 // Supabase 客户端配置
+// 版本: 2025-08-05-12:15 - 修复 diariesWithProfiles 引用错误
 class SupabaseClient {
     constructor() {
         // 这些配置需要从Supabase项目中获取
@@ -578,43 +579,72 @@ class SupabaseClient {
     // 获取所有日记（临时方案：分别查询后合并）
     async getAllDiaries() {
         try {
-            console.log('🔍 开始获取所有日记...');
+            console.log('🔍 开始获取所有日记... [版本: 2025-08-05-12:15]');
+            
+            // 检查客户端状态
+            if (!this.supabase) {
+                throw new Error('Supabase客户端未初始化');
+            }
+            
             // 先获取所有日记
+            console.log('📡 正在查询日记数据...');
             const { data: diaries, error: diaryError } = await this.supabase
                 .from('diary_entries')
                 .select('*')
                 .order('created_at', { ascending: false });
             
-            console.log('📊 数据库查询结果:', { diaries: diaries?.length || 0, error: diaryError });
+            console.log('📊 数据库查询结果:', { 
+                diaries: diaries?.length || 0, 
+                error: diaryError?.message || diaryError 
+            });
             
-            if (diaryError) throw diaryError;
+            if (diaryError) {
+                console.error('❌ 日记查询错误:', diaryError);
+                throw diaryError;
+            }
+            
+            if (!diaries || diaries.length === 0) {
+                console.log('📭 没有找到任何日记');
+                return { success: true, data: {} };
+            }
             
             // 获取所有用户资料
+            console.log('👤 正在查询用户资料...');
             const { data: profiles, error: profileError } = await this.supabase
                 .from('profiles')
                 .select('id, nickname, avatar_url');
             
-            console.log('👤 用户资料查询结果:', { profiles: profiles?.length || 0, error: profileError });
+            console.log('👤 用户资料查询结果:', { 
+                profiles: profiles?.length || 0, 
+                error: profileError?.message || profileError 
+            });
             
-            if (profileError) throw profileError;
+            if (profileError) {
+                console.error('❌ 用户资料查询错误:', profileError);
+                throw profileError;
+            }
             
             // 获取当前用户的收藏状态
             let userLikes = [];
             if (this.currentUser) {
+                console.log('❤️ 正在查询用户收藏...');
                 const { data: likes, error: likesError } = await this.supabase
                     .from('diary_likes')
                     .select('diary_id')
                     .eq('user_id', this.currentUser.id);
                 
-                console.log('❤️ 用户收藏查询结果:', { likes: likes?.length || 0, error: likesError });
+                console.log('❤️ 用户收藏查询结果:', { 
+                    likes: likes?.length || 0, 
+                    error: likesError?.message || likesError 
+                });
                 
-                if (!likesError) {
+                if (!likesError && likes) {
                     userLikes = likes.map(like => like.diary_id);
                 }
             }
             
             // 创建用户ID到资料的映射
-            const profileMap = profiles.reduce((acc, profile) => {
+            const profileMap = (profiles || []).reduce((acc, profile) => {
                 acc[profile.id] = profile;
                 return acc;
             }, {});
@@ -647,8 +677,14 @@ class SupabaseClient {
             
             return { success: true, data: groupedByUser };
         } catch (error) {
-            console.error('❌ getAllDiaries 错误:', error);
-            return { success: false, error: error.message };
+            console.error('❌ getAllDiaries 错误详情:', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code,
+                stack: error.stack
+            });
+            return { success: false, error: error.message || '获取日记失败' };
         }
     }
 
