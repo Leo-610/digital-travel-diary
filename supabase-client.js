@@ -85,7 +85,35 @@ class SupabaseClient {
                 
                 // 特殊处理重复邮箱错误
                 if (errorDescription?.includes('Multiple accounts with the same email address')) {
-                    alert('❌ 账户冲突：该邮箱已注册过邮箱账户\n\n解决方案：\n1. 使用邮箱+密码登录\n2. 或者联系管理员合并账户');
+                    console.warn('⚠️ 检测到重复账户错误，尝试清理会话...');
+                    
+                    // 清理可能的冲突会话
+                    this.clearLocalSession();
+                    
+                    // 显示用户友好的提示
+                    const confirmResult = confirm(
+                        '❌ 账户冲突检测\n\n' +
+                        '该邮箱可能已经通过其他方式注册过账户。\n\n' +
+                        '解决方案：\n' +
+                        '✅ 点击"确定"：尝试使用邮箱登录\n' +
+                        '❌ 点击"取消"：继续使用本地模式\n\n' +
+                        '是否切换到登录界面？'
+                    );
+                    
+                    if (confirmResult) {
+                        // 切换到登录界面
+                        const registerForm = document.getElementById('register-form');
+                        const loginForm = document.getElementById('login-form');
+                        const registerTab = document.getElementById('register-tab');
+                        const loginTab = document.getElementById('login-tab');
+                        
+                        if (registerForm && loginForm && registerTab && loginTab) {
+                            registerForm.style.display = 'none';
+                            loginForm.style.display = 'block';
+                            registerTab.classList.remove('active');
+                            loginTab.classList.add('active');
+                        }
+                    }
                 } else {
                     alert('GitHub登录失败: ' + (errorDescription || error));
                 }
@@ -153,6 +181,9 @@ class SupabaseClient {
             
             console.log('✅ 注册响应:', data);
             
+            // 检查是否需要邮箱验证
+            const needsEmailVerification = data.user && !data.user.email_confirmed_at;
+            
             // 创建用户档案
             if (data.user && data.user.id) {
                 console.log('🔄 创建用户档案...');
@@ -162,6 +193,13 @@ class SupabaseClient {
                 if (profileResult.needsVerification) {
                     console.log('⚠️ 用户需要验证邮箱后才能完成档案创建');
                 }
+            }
+            
+            // 显示注册成功消息
+            if (needsEmailVerification) {
+                alert('✅ 注册成功！\n\n📧 我们已向您的邮箱发送确认邮件\n请点击邮件中的链接完成验证\n\n验证后即可正常使用云端功能');
+            } else {
+                alert('✅ 注册成功！\n\n您现在可以使用云端功能了');
             }
             
             return { success: true, data };
@@ -285,6 +323,22 @@ class SupabaseClient {
         try {
             console.log('🔄 创建用户档案...', { userId, nickname });
             
+            // 先检查档案是否已存在
+            const { data: existingProfile, error: checkError } = await this.supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
+                
+            if (checkError && checkError.code !== 'PGRST116') {
+                console.log('⚠️ 检查现有档案时出错:', checkError);
+            }
+            
+            if (existingProfile) {
+                console.log('✅ 用户档案已存在，跳过创建');
+                return { success: true, data: existingProfile };
+            }
+            
             // 使用service role权限或暂时跳过RLS检查
             const { data, error } = await this.supabase
                 .from('profiles')
@@ -311,6 +365,10 @@ class SupabaseClient {
             return { success: true, data };
         } catch (error) {
             console.error('❌ createUserProfile 错误:', error);
+            // 对于权限错误，仍然返回success=true，但标记需要后续处理
+            if (error.code === '42501' || error.message.includes('row-level security')) {
+                return { success: true, data: null, needsVerification: true, error: 'RLS策略限制' };
+            }
             return { success: false, error: error.message };
         }
     }
