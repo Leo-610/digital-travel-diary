@@ -27,6 +27,14 @@ class SupabaseClient {
                     global: {
                         headers: {
                             'X-Client-Info': 'digital-travel-diary@1.0.0'
+                        },
+                        fetch: (url, options = {}) => {
+                            // 确保使用正确的fetch配置
+                            return fetch(url, {
+                                ...options,
+                                mode: 'cors',
+                                credentials: 'omit'
+                            });
                         }
                     }
                 });
